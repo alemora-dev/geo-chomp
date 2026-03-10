@@ -3,7 +3,8 @@
 export function initMap(containerId) {
     const map = new maplibregl.Map({
         container: containerId,
-        style: buildDarkStyle(),
+        // OpenFreeMap estilo completo — gratis, sin API key, tiles y estilos incluidos
+        style: 'https://tiles.openfreemap.org/styles/liberty',
         zoom: 17,
         center: [-3.7037, 40.4226],  // Malasaña, Madrid (fallback antes del GPS)
         pitch: 0,
@@ -12,94 +13,158 @@ export function initMap(containerId) {
         maxZoom: 19,
         minZoom: 14,
     });
+
+    // Aplicar el tema oscuro arcade en cuanto el mapa cargue
+    map.once('load', () => addDarkOverrides(map));
+
     return map;
 }
 
+// ── Oscurecer el mapa base de OFM ──────────────────────────────────────────────────
+// OFM liberty style tiene capas bien nombradas. Las reemplazamos para el look arcade.
+function addDarkOverrides(map) {
+    try {
+        // Fondo negro
+        if (map.getLayer('background')) {
+            map.setPaintProperty('background', 'background-color', '#000000');
+        }
+        // Oscurecer agua
+        ['water', 'water_shadow', 'waterway'].forEach(id => {
+            if (map.getLayer(id)) map.setPaintProperty(id, 'fill-color', '#050d18');
+        });
+        // Oscurecer tierra / landuse
+        ['landuse_park', 'landuse', 'grass', 'scrub', 'sand', 'farmland'].forEach(id => {
+            if (map.getLayer(id)) {
+                try { map.setPaintProperty(id, 'fill-color', '#050805'); } catch { }
+            }
+        });
+        // Oscurecer edificios
+        ['building', 'buildings', 'building_3d'].forEach(id => {
+            if (map.getLayer(id)) {
+                try { map.setPaintProperty(id, 'fill-color', '#0d0d0d'); } catch { }
+                try { map.setPaintProperty(id, 'fill-extrusion-color', '#0d0d0d'); } catch { }
+            }
+        });
+        // Oscurecer carreteras principales
+        ['highway_motorway', 'highway_trunk', 'highway_primary'].forEach(id => {
+            if (map.getLayer(id)) {
+                try { map.setPaintProperty(id, 'line-color', '#1a1a1a'); } catch { }
+            }
+        });
+        // Resaltar calles secundarias en neón amarillo
+        const streetLayers = map.getStyle().layers
+            .filter(l => l.type === 'line' && l['source-layer'] === 'transportation')
+            .map(l => l.id)
+            .filter(id => !['highway_motorway', 'highway_trunk', 'highway_primary'].includes(id));
+
+        streetLayers.forEach(id => {
+            try {
+                map.setPaintProperty(id, 'line-color', '#FFD700');
+                map.setPaintProperty(id, 'line-opacity', 0.5);
+            } catch { }
+        });
+
+        // Ocultar labels (texto del mapa) para que no distraigan del juego
+        map.getStyle().layers
+            .filter(l => l.type === 'symbol')
+            .forEach(l => {
+                try { map.setLayoutProperty(l.id, 'visibility', 'none'); } catch { }
+            });
+
+        console.log('[GeoChomp] Tema oscuro arcade aplicado ✓');
+    } catch (err) {
+        console.warn('[GeoChomp] Error aplicando tema oscuro:', err);
+    }
+}
+
+
 // ── Estilo oscuro arcade ─────────────────────────────────────────────────────────
+// Usa el estilo de OpenFreeMap como base y lo oscurece con modificaciones post-load
 function buildDarkStyle() {
+    // Devuelve un estilo completo con fondo negro usando demotiles de MapLibre
+    // para evitar depender de API keys o servers externos poco fiables en dev
     return {
         version: 8,
         glyphs: 'https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf',
         sources: {
-            osm: {
+            ofm: {
                 type: 'vector',
-                url: 'https://tiles.openfreemap.org/planet',
+                // OpenFreeMap planet tiles — gratis, sin API key
+                tiles: [
+                    'https://tiles.openfreemap.org/planet/{z}/{x}/{y}',
+                ],
+                minzoom: 0, maxzoom: 14,
+                attribution: '© OpenMapTiles © OpenStreetMap'
             }
         },
         layers: [
-            // Fondo absolutamente negro
             {
                 id: 'background',
                 type: 'background',
                 paint: { 'background-color': '#000000' }
             },
-            // Agua — azul muy oscuro
+            // Agua
             {
                 id: 'water',
                 type: 'fill',
-                source: 'osm', 'source-layer': 'water',
-                paint: { 'fill-color': '#050d18', 'fill-opacity': 0.95 }
+                source: 'ofm', 'source-layer': 'water',
+                paint: { 'fill-color': '#050d18' }
             },
-            // Parques / áreas verdes — muy oscuras
-            {
-                id: 'landuse-park',
-                type: 'fill',
-                source: 'osm', 'source-layer': 'landuse',
-                filter: ['in', 'class', 'park', 'grass', 'pitch', 'garden'],
-                paint: { 'fill-color': '#060d08', 'fill-opacity': 0.9 }
-            },
-            // Edificios — gris muy oscuro, casi invisible
+            // Edificios
             {
                 id: 'buildings',
                 type: 'fill',
-                source: 'osm', 'source-layer': 'building',
+                source: 'ofm', 'source-layer': 'building',
                 paint: { 'fill-color': '#0d0d0d', 'fill-opacity': 0.95 }
             },
-            // Bordes de edificios — línea sutil
+            // Carreteras principales — muy oscuras
             {
-                id: 'buildings-outline',
+                id: 'streets-major',
                 type: 'line',
-                source: 'osm', 'source-layer': 'building',
-                paint: { 'line-color': '#1a1a1a', 'line-width': 0.5 }
-            },
-            // Calles NO jugables (autopistas, vías rápidas) — apagadas
-            {
-                id: 'streets-dim',
-                type: 'line',
-                source: 'osm', 'source-layer': 'transportation',
+                source: 'ofm', 'source-layer': 'transportation',
                 filter: ['in', 'class', 'motorway', 'trunk', 'primary'],
-                paint: { 'line-color': '#222222', 'line-width': 3, 'line-cap': 'round' }
+                layout: { 'line-cap': 'round', 'line-join': 'round' },
+                paint: { 'line-color': '#1a1a1a', 'line-width': 3 }
             },
-            // Glow exterior de calles jugables (blur ancho para el halo)
+            // Glow de calles secundarias (jugables)
             {
                 id: 'streets-glow',
                 type: 'line',
-                source: 'osm', 'source-layer': 'transportation',
-                filter: ['in', 'class', 'secondary', 'tertiary', 'residential', 'living_street', 'service', 'path', 'footway', 'pedestrian'],
+                source: 'ofm', 'source-layer': 'transportation',
+                filter: ['all',
+                    ['!=', 'class', 'motorway'],
+                    ['!=', 'class', 'trunk'],
+                    ['!=', 'class', 'primary']
+                ],
+                layout: { 'line-cap': 'round', 'line-join': 'round' },
                 paint: {
                     'line-color': '#FFD700',
-                    'line-width': 8,
-                    'line-blur': 10,
-                    'line-opacity': 0.2
+                    'line-width': ['interpolate', ['linear'], ['zoom'], 14, 6, 18, 12],
+                    'line-blur': 8,
+                    'line-opacity': 0.18
                 }
             },
-            // Calles JUGABLES — neón amarillo, línea más fina y nítida encima del glow
+            // Calles jugables — neón amarillo
             {
                 id: 'streets-playable',
                 type: 'line',
-                source: 'osm', 'source-layer': 'transportation',
-                filter: ['in', 'class', 'secondary', 'tertiary', 'residential', 'living_street', 'service', 'path', 'footway', 'pedestrian'],
+                source: 'ofm', 'source-layer': 'transportation',
+                filter: ['all',
+                    ['!=', 'class', 'motorway'],
+                    ['!=', 'class', 'trunk'],
+                    ['!=', 'class', 'primary']
+                ],
+                layout: { 'line-cap': 'round', 'line-join': 'round' },
                 paint: {
                     'line-color': '#FFD700',
-                    'line-width': 1.5,
-                    'line-opacity': 0.5,
-                    'line-cap': 'round',
-                    'line-join': 'round',
+                    'line-width': ['interpolate', ['linear'], ['zoom'], 14, 1, 18, 2.5],
+                    'line-opacity': 0.55,
                 }
             },
         ]
     };
 }
+
 
 // ── Capas dinámicas del juego ────────────────────────────────────────────────────
 

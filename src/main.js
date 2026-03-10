@@ -72,6 +72,8 @@ async function handlePlay() {
             if (!r.ok) throw new Error(`HTTP ${r.status}`);
             return r.json();
         });
+        // Guardar en scope del módulo para setupGameLayers
+        window._geochomp_mapData = mapData;
 
         // Construir grafo en memoria
         graph = new StreetGraph(mapData.streets);
@@ -108,7 +110,10 @@ async function handlePlay() {
 }
 
 function setupGameLayers() {
-    addGameLayers(map, game);
+    // Usar el mapData guardado en scope global de módulo
+    const md = window._geochomp_mapData;
+    if (!md || !game) { console.warn('[GeoChomp] setupGameLayers: data no disponible'); return; }
+    addGameLayers(map, md, game);
     updateHUD(game);
 }
 
@@ -331,19 +336,26 @@ function showLoadingState(loading) {
 
 function startDemoMode() {
     console.log('[GeoChomp] Modo Demo activado (sin GPS)');
-    if (!game || game.phase === 'idle') {
-        if (game) {
-            game.start();
+    if (!game) {
+        // Si el juego todavía no se creó (error al cargar datos), crear un estado mínimo
+        console.log('[GeoChomp] Demo: datos no cargados, mostrando mapa base');
+        if (map.loaded()) {
             map.flyTo({ center: [-3.7037, 40.4226], zoom: 17.5 });
-            ghosts.forEach(g => g.startMoving(() => ({
-                lat: 40.4226,
-                lng: -3.7037 + (Math.random() - 0.5) * 0.001
-            }), GHOST_INTERVAL_MS));
-            // Simular posición del jugador en el centro del barrio
-            playerPos = { lat: 40.4226, lng: -3.7037 };
-            updatePlayerLayer(map, playerPos);
-            updateGPSIndicator(999); // Indica GPS no disponible
+        } else {
+            map.once('load', () => map.flyTo({ center: [-3.7037, 40.4226], zoom: 17.5 }));
         }
+        return;
+    }
+    if (game.phase === 'idle') {
+        game.start();
+        map.flyTo({ center: [-3.7037, 40.4226], zoom: 17.5 });
+        ghosts.forEach(g => g.startMoving(() => ({
+            lat: 40.4226,
+            lng: -3.7037 + (Math.random() - 0.5) * 0.001
+        }), GHOST_INTERVAL_MS));
+        playerPos = { lat: 40.4226, lng: -3.7037 };
+        updatePlayerLayer(map, playerPos);
+        updateGPSIndicator(999);
     }
 }
 
