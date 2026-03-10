@@ -1,0 +1,454 @@
+/* ============================================================
+   GeoChomp — Global Styles
+   Arcade dark mode. Font: Press Start 2P.
+   ============================================================ */
+
+:root {
+    --gold: #FFD700;
+    --gold-glow: rgba(255, 215, 0, 0.6);
+    --red: #FF3333;
+    --pink: #FF88CC;
+    --blue: #4488FF;
+    --bg: #000000;
+    --bg-overlay: rgba(0, 0, 0, 0.88);
+    --text: #FFFFFF;
+    --text-dim: #888888;
+    --green: #44FF88;
+    --safe-bottom: env(safe-area-inset-bottom, 0px);
+    --safe-top: env(safe-area-inset-top, 0px);
+}
+
+/* ── Reset ── */
+*,
+*::before,
+*::after {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+html,
+body {
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background: var(--bg);
+    font-family: 'Press Start 2P', monospace;
+    color: var(--text);
+    -webkit-font-smoothing: antialiased;
+}
+
+/* ── Map Container ── */
+#map-container {
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+}
+
+/* ── HUD (top bar) ── */
+#hud {
+    position: fixed;
+    top: var(--safe-top);
+    left: 0;
+    right: 0;
+    z-index: 100;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 14px 16px 20px;
+    background: linear-gradient(to bottom, rgba(0, 0, 0, 0.85) 0%, transparent 100%);
+    pointer-events: none;
+    gap: 8px;
+}
+
+#hud-lives {
+    display: flex;
+    gap: 4px;
+    font-size: 18px;
+}
+
+.life-icon {
+    transition: opacity 0.3s;
+}
+
+.life-icon.lost {
+    opacity: 0.2;
+    filter: grayscale(1);
+}
+
+#hud-score {
+    font-size: 10px;
+    color: var(--gold);
+    text-shadow: 0 0 10px var(--gold-glow);
+    letter-spacing: 1px;
+}
+
+#hud-pellets {
+    font-size: 9px;
+    color: var(--text-dim);
+}
+
+/* ── GPS Indicator ── */
+#gps-indicator {
+    position: fixed;
+    top: calc(var(--safe-top) + 60px);
+    right: 12px;
+    z-index: 110;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 7px;
+    color: var(--text-dim);
+    pointer-events: none;
+}
+
+.gps-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--text-dim);
+    transition: background 0.4s;
+}
+
+.gps-dot.active {
+    background: var(--green);
+    box-shadow: 0 0 8px var(--green);
+}
+
+.gps-dot.inactive {
+    background: var(--red);
+    animation: blink 1s infinite;
+}
+
+.gps-dot.good {
+    background: var(--green);
+    box-shadow: 0 0 8px var(--green);
+}
+
+.gps-dot.poor {
+    background: #FFA500;
+    box-shadow: 0 0 8px #FFA500;
+}
+
+@keyframes blink {
+
+    0%,
+    100% {
+        opacity: 1;
+    }
+
+    50% {
+        opacity: 0.2;
+    }
+}
+
+/* ── Bottom Bar ── */
+#bottom-bar {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 100;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 16px;
+    padding-bottom: calc(12px + var(--safe-bottom));
+    background: linear-gradient(to top, rgba(0, 0, 0, 0.85) 0%, transparent 100%);
+}
+
+.btn-game {
+    background: rgba(255, 215, 0, 0.12);
+    border: 1px solid rgba(255, 215, 0, 0.4);
+    color: var(--gold);
+    font-family: 'Press Start 2P', monospace;
+    font-size: 8px;
+    padding: 10px 14px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: background 0.2s, transform 0.1s, box-shadow 0.2s;
+    letter-spacing: 0.5px;
+}
+
+.btn-game:hover {
+    background: rgba(255, 215, 0, 0.25);
+    box-shadow: 0 0 12px var(--gold-glow);
+}
+
+.btn-game:active {
+    transform: scale(0.95);
+}
+
+#multiplier-badge {
+    background: var(--gold);
+    color: var(--bg);
+    font-size: 12px;
+    padding: 6px 12px;
+    border-radius: 20px;
+    font-weight: bold;
+    box-shadow: 0 0 20px var(--gold-glow);
+    animation: pulse 0.8s ease-in-out infinite alternate;
+}
+
+/* ── Overlay Base ── */
+.overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 200;
+    background: var(--bg-overlay);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+    transition: opacity 0.3s;
+}
+
+.overlay.hidden {
+    display: none;
+}
+
+.overlay-inner {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 20px;
+    padding: 32px 24px;
+    text-align: center;
+    max-width: 400px;
+    width: 90%;
+}
+
+/* ── Neon Title ── */
+.neon-title {
+    font-size: clamp(36px, 10vw, 56px);
+    line-height: 1.3;
+    color: var(--gold);
+    text-shadow:
+        0 0 10px var(--gold),
+        0 0 25px var(--gold),
+        0 0 50px var(--gold-glow);
+    animation: pulse 1.6s ease-in-out infinite alternate;
+}
+
+.neon-title.small {
+    font-size: clamp(22px, 6vw, 32px);
+}
+
+@keyframes pulse {
+    from {
+        opacity: 1;
+        filter: brightness(1);
+    }
+
+    to {
+        opacity: 0.75;
+        filter: brightness(1.3);
+    }
+}
+
+/* ── Ghost Row on Start Screen ── */
+.ghost-row {
+    display: flex;
+    gap: 24px;
+    font-size: 40px;
+}
+
+.ghost {
+    display: inline-block;
+    animation: float 1.2s ease-in-out infinite alternate;
+}
+
+.ghost.blinky {
+    color: var(--red);
+}
+
+.ghost.pinky {
+    color: var(--pink);
+}
+
+@keyframes float {
+    from {
+        transform: translateY(0px);
+    }
+
+    to {
+        transform: translateY(-10px);
+    }
+}
+
+/* ── Subtitle / Instructions ── */
+.subtitle {
+    font-size: 9px;
+    color: var(--text-dim);
+    letter-spacing: 1px;
+}
+
+.instructions {
+    font-size: 9px;
+    line-height: 2.2;
+    color: var(--text);
+    background: rgba(255, 215, 0, 0.06);
+    border: 1px solid rgba(255, 215, 0, 0.15);
+    border-radius: 8px;
+    padding: 16px 20px;
+    text-align: left;
+}
+
+.neighborhood-badge {
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 20px;
+    padding: 8px 16px;
+    font-size: 8px;
+    color: var(--text-dim);
+}
+
+/* ── Buttons ── */
+.btn-primary {
+    background: var(--gold);
+    color: var(--bg);
+    font-family: 'Press Start 2P', monospace;
+    font-size: 11px;
+    padding: 16px 32px;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    box-shadow: 0 0 30px var(--gold-glow), 0 4px 16px rgba(0, 0, 0, 0.5);
+    transition: transform 0.15s, box-shadow 0.15s;
+    letter-spacing: 1px;
+    width: 100%;
+    max-width: 260px;
+}
+
+.btn-primary:hover {
+    transform: scale(1.04);
+    box-shadow: 0 0 40px var(--gold);
+}
+
+.btn-primary:active {
+    transform: scale(0.97);
+}
+
+.btn-secondary {
+    background: transparent;
+    color: var(--text-dim);
+    font-family: 'Press Start 2P', monospace;
+    font-size: 9px;
+    padding: 12px 24px;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 8px;
+    cursor: pointer;
+    transition: border-color 0.2s, color 0.2s;
+    width: 100%;
+    max-width: 260px;
+}
+
+.btn-secondary:hover {
+    border-color: rgba(255, 255, 255, 0.5);
+    color: var(--text);
+}
+
+.small-text {
+    font-size: 7px;
+    color: var(--text-dim);
+}
+
+/* ── End Screen ── */
+.end-emoji {
+    font-size: 64px;
+}
+
+.score-big {
+    font-size: clamp(32px, 10vw, 52px);
+    color: var(--gold);
+    text-shadow: 0 0 20px var(--gold-glow);
+}
+
+.end-stats {
+    display: flex;
+    gap: 24px;
+    font-size: 8px;
+    color: var(--text-dim);
+}
+
+/* ── Ghost Alert ── */
+.ghost-alert {
+    position: fixed;
+    bottom: 90px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 150;
+    background: rgba(255, 51, 51, 0.9);
+    color: #fff;
+    font-family: 'Press Start 2P', monospace;
+    font-size: 8px;
+    padding: 8px 20px;
+    border-radius: 20px;
+    border: 1px solid #FF3333;
+    box-shadow: 0 0 20px rgba(255, 51, 51, 0.8);
+    animation: alertPulse 0.5s ease-in-out infinite alternate;
+    pointer-events: none;
+}
+
+.ghost-alert.hidden {
+    display: none;
+}
+
+@keyframes alertPulse {
+    from {
+        box-shadow: 0 0 10px rgba(255, 51, 51, 0.6);
+    }
+
+    to {
+        box-shadow: 0 0 30px rgba(255, 51, 51, 1);
+    }
+}
+
+/* ── Frightened Banner ── */
+.frightened-banner {
+    position: fixed;
+    top: 80px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 150;
+    background: rgba(68, 136, 255, 0.9);
+    color: #fff;
+    font-family: 'Press Start 2P', monospace;
+    font-size: 8px;
+    padding: 8px 20px;
+    border-radius: 20px;
+    border: 1px solid var(--blue);
+    box-shadow: 0 0 20px rgba(68, 136, 255, 0.8);
+    pointer-events: none;
+    animation: bannerFade 8s forwards;
+}
+
+.frightened-banner.hidden {
+    display: none;
+}
+
+@keyframes bannerFade {
+    0% {
+        opacity: 1;
+    }
+
+    70% {
+        opacity: 1;
+    }
+
+    100% {
+        opacity: 0;
+    }
+}
+
+/* ── MapLibre overrides — ocultar logo & attribution ── */
+.maplibregl-ctrl-bottom-left,
+.maplibregl-ctrl-bottom-right {
+    display: none !important;
+}
+
+/* ── Utility ── */
+.hidden {
+    display: none !important;
+}

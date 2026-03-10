@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="description"
+        content="GeoChomp — El juego GPS Pac-Man. Come pellets en las calles reales de tu barrio. Escapa de los fantasmas." />
+    <title>GeoChomp 👻</title>
+
+    <!-- Google Fonts — Press Start 2P para el look arcade -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet" />
+
+    <!-- MapLibre GL JS -->
+    <script src="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.js"></script>
+    <link href="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.css" rel="stylesheet" />
+
+    <!-- Turf.js -->
+    <script src="https://unpkg.com/@turf/turf@6.5.0/turf.min.js"></script>
+
+    <!-- Howler.js -->
+    <script src="https://unpkg.com/howler@2.2.4/dist/howler.min.js"></script>
+
+    <!-- idb-keyval para IndexedDB simple -->
+    <script src="https://unpkg.com/idb-keyval@6/dist/umd.js"></script>
+
+    <link rel="stylesheet" href="style.css" />
+</head>
+
+<body>
+
+    <!-- ═══════════════════════════════════ MAPA ═══════════════════════════════════ -->
+    <div id="map-container"></div>
+
+    <!-- ═══════════════════════════════════ HUD ════════════════════════════════════ -->
+    <div id="hud" aria-hidden="true">
+        <div id="hud-lives">
+            <span class="life-icon" id="life-1">❤️</span>
+            <span class="life-icon" id="life-2">❤️</span>
+            <span class="life-icon" id="life-3">❤️</span>
+        </div>
+        <div id="hud-score">SCORE: <span id="score-value">0</span></div>
+        <div id="hud-pellets"><span id="pellets-remaining">--</span> 🍬</div>
+    </div>
+
+    <!-- ═══════════════════════════════════ GPS INDICATOR ════════════════════════════ -->
+    <div id="gps-indicator" title="Precisión GPS">
+        <span id="gps-dot" class="gps-dot inactive"></span>
+        <span id="gps-accuracy-text">GPS...</span>
+    </div>
+
+    <!-- ═══════════════════════════════════ BOTTOM BAR ══════════════════════════════ -->
+    <div id="bottom-bar">
+        <button id="btn-pause" class="btn-game" aria-label="Pausar juego">⏸ PAUSA</button>
+        <div id="multiplier-badge" class="hidden">×<span id="multiplier-value">2</span></div>
+        <button id="btn-share" class="btn-game" aria-label="Compartir puntuación">📸 SHARE</button>
+    </div>
+
+    <!-- ═══════════════════════════════════ PANTALLA DE INICIO ══════════════════════ -->
+    <div id="start-screen" class="overlay" role="dialog" aria-modal="true" aria-label="Pantalla de inicio">
+        <div class="overlay-inner">
+            <div class="neon-title">GEO<br />CHOMP</div>
+            <div class="ghost-row" aria-hidden="true">
+                <span class="ghost blinky">👻</span>
+                <span class="ghost pinky" style="animation-delay:0.3s">👻</span>
+            </div>
+            <p class="subtitle">El Pac-Man de las calles reales</p>
+            <p class="instructions">
+                📍 Camina por tu barrio<br />
+                🍬 Come todos los pellets<br />
+                👻 Escapa de los fantasmas<br />
+                ⚡ Power pellet = fantasmas vulnerables
+            </p>
+            <div id="neighborhood-info" class="neighborhood-badge">
+                <span>📍</span> Malasaña, Madrid
+            </div>
+            <button id="btn-play" class="btn-primary" aria-label="Iniciar juego">
+                ▶ JUGAR
+            </button>
+            <p class="small-text">Requiere GPS activado</p>
+        </div>
+    </div>
+
+    <!-- ═══════════════════════════════════ PANTALLA PAUSA ══════════════════════════ -->
+    <div id="pause-screen" class="overlay hidden" role="dialog" aria-modal="true" aria-label="Juego pausado">
+        <div class="overlay-inner">
+            <h2 class="neon-title small">PAUSA</h2>
+            <p class="subtitle">Score: <span id="pause-score">0</span></p>
+            <button id="btn-resume" class="btn-primary">▶ CONTINUAR</button>
+            <button id="btn-abandon" class="btn-secondary">✕ ABANDONAR</button>
+        </div>
+    </div>
+
+    <!-- ═══════════════════════════════════ PANTALLA FINAL ══════════════════════════ -->
+    <div id="end-screen" class="overlay hidden" role="dialog" aria-modal="true" aria-label="Fin del juego">
+        <div class="overlay-inner">
+            <div id="end-emoji" class="end-emoji">💀</div>
+            <h2 id="end-title" class="neon-title small">GAME OVER</h2>
+            <p class="subtitle">Puntuación final</p>
+            <div id="end-score" class="score-big">0</div>
+            <div id="end-stats" class="end-stats">
+                <div>Pellets: <span id="end-pellets">0</span></div>
+                <div>Barrio: Malasaña</div>
+            </div>
+            <button id="btn-share-end" class="btn-primary">📸 COMPARTIR STORY</button>
+            <button id="btn-restart" class="btn-secondary">🔄 JUGAR DE NUEVO</button>
+        </div>
+    </div>
+
+    <!-- ═══════════════════════════════════ GHOST ALERT ═════════════════════════════ -->
+    <div id="ghost-alert" class="ghost-alert hidden" aria-live="assertive">⚠️ FANTASMA CERCA</div>
+
+    <!-- ═══════════════════════════════════ FRIGHTENED BANNER ════════════════════════ -->
+    <div id="frightened-banner" class="frightened-banner hidden" aria-live="polite">⚡ ¡COME FANTASMAS!</div>
+
+    <!-- ═══════════════════════════════════ SCRIPTS ═════════════════════════════════ -->
+    <script type="module" src="src/main.js"></script>
+</body>
+
+</html>
