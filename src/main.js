@@ -334,8 +334,6 @@ function showLoadingState(loading) {
 
 // ── Modo Demo (sin GPS, para pruebas en desktop) ──────────────────────────────────
 
-let isDemoMode = false;
-
 function startDemoMode() {
     console.log('[GeoChomp] Modo Demo activado (sin GPS)');
     if (!game) {
@@ -349,7 +347,6 @@ function startDemoMode() {
         return;
     }
     if (game.phase === 'idle') {
-        isDemoMode = true;
         game.start();
         map.flyTo({ center: [-3.7037, 40.4226], zoom: 17.5 });
         ghosts.forEach(g => g.startMoving(() => ({
@@ -399,7 +396,6 @@ document.addEventListener('keydown', (e) => {
     // Prevent the map from panning via its own key bindings
     e.preventDefault();
 
-    if (!isDemoMode) return;
     if (keysHeld.has(e.key)) return;   // already held
 
     keysHeld.add(e.key);
