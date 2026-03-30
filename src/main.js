@@ -359,5 +359,60 @@ function startDemoMode() {
     }
 }
 
+// ── Controles de teclado (demo / desktop) ─────────────────────────────────────────
+// Moves ~5 meters per keypress. At latitude 40°N:
+//   1° lat ≈ 111 000 m  →  5 m ≈ 0.000045°
+//   1° lng ≈  85 200 m  →  5 m ≈ 0.000059°
+const KEY_STEP_LAT = 0.000045;
+const KEY_STEP_LNG = 0.000059;
+
+const MOVE_KEYS = new Set([
+    'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight',
+    'w', 'a', 's', 'd',
+    'W', 'A', 'S', 'D',
+]);
+
+const keysHeld = new Set();
+let keyMoveInterval = null;
+
+function applyKeyMovement() {
+    if (!playerPos || !game || game.phase !== 'playing') return;
+
+    let dLat = 0, dLng = 0;
+    if (keysHeld.has('ArrowUp')    || keysHeld.has('w') || keysHeld.has('W')) dLat += KEY_STEP_LAT;
+    if (keysHeld.has('ArrowDown')  || keysHeld.has('s') || keysHeld.has('S')) dLat -= KEY_STEP_LAT;
+    if (keysHeld.has('ArrowRight') || keysHeld.has('d') || keysHeld.has('D')) dLng += KEY_STEP_LNG;
+    if (keysHeld.has('ArrowLeft')  || keysHeld.has('a') || keysHeld.has('A')) dLng -= KEY_STEP_LNG;
+
+    if (dLat === 0 && dLng === 0) return;
+
+    const newPos = { lat: playerPos.lat + dLat, lng: playerPos.lng + dLng };
+    handleGPSUpdate(newPos, 5);
+    map.panTo([newPos.lng, newPos.lat], { duration: 80 });
+}
+
+document.addEventListener('keydown', (e) => {
+    if (!MOVE_KEYS.has(e.key)) return;
+    // Prevent the map from panning via its own key bindings
+    e.preventDefault();
+
+    if (keysHeld.has(e.key)) return;   // already held
+
+    keysHeld.add(e.key);
+
+    if (!keyMoveInterval) {
+        applyKeyMovement();   // immediate first step
+        keyMoveInterval = setInterval(applyKeyMovement, 150);
+    }
+});
+
+document.addEventListener('keyup', (e) => {
+    keysHeld.delete(e.key);
+    if (keysHeld.size === 0 && keyMoveInterval) {
+        clearInterval(keyMoveInterval);
+        keyMoveInterval = null;
+    }
+});
+
 // ── Arrancar ──────────────────────────────────────────────────────────────────────
 main().catch(console.error);
