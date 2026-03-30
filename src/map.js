@@ -12,6 +12,7 @@ export function initMap(containerId) {
         attributionControl: false,
         maxZoom: 19,
         minZoom: 14,
+        keyboard: false,  // Disable MapLibre's own keyboard panning; game handles arrow keys
     });
 
     // Aplicar el tema oscuro arcade en cuanto el mapa cargue
