@@ -17,10 +17,11 @@ import {
 // ── Config ────────────────────────────────────────────────────────────────────────
 const NEIGHBORHOOD_ID = 'malasana';
 const NEIGHBORHOOD_NAME = 'Malasaña, Madrid';
+const NEIGHBORHOOD_CENTER = { lat: 40.4226, lng: -3.7037 };
 const DATA_URL = 'data/neighborhoods/malasana.geojson';
 const GHOST_INTERVAL_MS = 2200;   // Velocidad de los fantasmas (ms entre pasos)
 const GHOST_ALERT_DIST = 35;     // Metros para alertar de fantasma cerca
-const MAP_UPDATE_THROTTLE = 1000; // Actualizar capas máx 1 vez por segundo
+const MAP_UPDATE_THROTTLE = 150;  // Match the keyboard tick rate (150ms)
 
 // Posiciones iniciales de los fantasmas (esquinas del bounding box de Malasaña)
 const GHOST_STARTS = {
@@ -35,6 +36,7 @@ let currentEdge = null;   // { nodeA, nodeB, dist, progress (0..1) } — graph e
 let desiredDir  = null;   // { lat, lng } — last non-zero direction vector from held keys
 let lastLayerUpdate = 0;
 let isInitialized = false;
+let ghostRenderInterval = null;
 
 // ── Entrada principal ─────────────────────────────────────────────────────────────
 async function main() {
@@ -126,8 +128,11 @@ function handleGPSUpdate(pos, accuracy) {
 
     // Primer fix: centrar mapa y arrancar la partida
     if (game.phase === 'idle') {
-        map.flyTo({ center: [pos.lng, pos.lat], zoom: 17.5, duration: 1500 });
+        // Always fly to the neighborhood center — game data lives in Malasaña regardless
+        // of the player's real-world GPS position (important for desktop/demo mode).
+        map.flyTo({ center: [NEIGHBORHOOD_CENTER.lng, NEIGHBORHOOD_CENTER.lat], zoom: 17.5, duration: 1500 });
         game.start();
+        startGhostRenderLoop();
         ghosts.forEach(g => g.startMoving(() => playerPos || pos, GHOST_INTERVAL_MS));
         document.getElementById('btn-pause').classList.remove('hidden');
     }
@@ -270,6 +275,7 @@ async function endGame(won) {
     if (!game) return;
     game.phase = won ? 'won' : 'dead';
     ghosts.forEach(g => g.stop());
+    stopGhostRenderLoop();
     stopGPS(gpsWatchId);
     audio.stopAll();
     if (won) { audio.playWin(); haptics.win(); }
@@ -296,8 +302,11 @@ function handleRestart() {
     ghosts.forEach(g => g.stop());
     stopGPS(gpsWatchId);
     audio.stopAll();
+    stopGhostRenderLoop();
     isInitialized = false;
     playerPos = null;
+    currentEdge = null;
+    desiredDir = null;
     game = null;
     graph = null;
     ghosts = [];
@@ -325,6 +334,21 @@ function ghostsAllFrightened() {
     return ghosts.every(g => g.state === 'frightened' || g.state === 'dead');
 }
 
+// Keeps ghost positions visually in sync regardless of whether the player is moving.
+function startGhostRenderLoop() {
+    if (ghostRenderInterval) return;
+    ghostRenderInterval = setInterval(() => {
+        if (map && ghosts.length && game?.phase === 'playing') {
+            updateGhostLayers(map, ghosts);
+        }
+    }, 500);
+}
+
+function stopGhostRenderLoop() {
+    clearInterval(ghostRenderInterval);
+    ghostRenderInterval = null;
+}
+
 function showLoadingState(loading) {
     const btn = document.getElementById('btn-play');
     if (!btn) return;
@@ -348,12 +372,17 @@ function startDemoMode() {
     }
     if (game.phase === 'idle') {
         game.start();
-        map.flyTo({ center: [-3.7037, 40.4226], zoom: 17.5 });
+        startGhostRenderLoop();
+        map.flyTo({ center: [NEIGHBORHOOD_CENTER.lng, NEIGHBORHOOD_CENTER.lat], zoom: 17.5 });
         ghosts.forEach(g => g.startMoving(() => ({
-            lat: 40.4226,
-            lng: -3.7037 + (Math.random() - 0.5) * 0.001
+            lat: NEIGHBORHOOD_CENTER.lat,
+            lng: NEIGHBORHOOD_CENTER.lng + (Math.random() - 0.5) * 0.001
         }), GHOST_INTERVAL_MS));
-        playerPos = { lat: 40.4226, lng: -3.7037 };
+        // Snap demo spawn to the nearest graph node so the first keypress doesn't jump
+        const spawnNode = graph?.nearestNode(NEIGHBORHOOD_CENTER.lat, NEIGHBORHOOD_CENTER.lng);
+        playerPos = spawnNode
+            ? { lat: spawnNode.lat, lng: spawnNode.lng }
+            : { lat: NEIGHBORHOOD_CENTER.lat, lng: NEIGHBORHOOD_CENTER.lng };
         updatePlayerLayer(map, playerPos);
         updateGPSIndicator(999);
     }
@@ -378,7 +407,7 @@ function findBestEdgeFrom(node, dir) {
     if (len === 0) return null;
     const nd = { lat: dir.lat / len, lng: dir.lng / len };
 
-    let best = null, bestDot = 0.3;
+    let best = null, bestDot = 0.1;  // 0.1 ≈ within 84° — needed for near-horizontal streets
     for (const { node: nb, dist } of node.neighbors) {
         const elen = Math.hypot(nb.lat - node.lat, nb.lng - node.lng);
         if (elen === 0) continue;
@@ -445,7 +474,7 @@ function applyKeyMovement() {
     const pos = lerpEdge(currentEdge);
     updatePlayerLayer(map, pos);    // immediate redraw, bypasses 1000ms throttle
     handleGPSUpdate(pos, 5);       // pellet/ghost collision, trail, score
-    map.panTo([pos.lng, pos.lat], { duration: 80 });
+    map.easeTo({ center: [pos.lng, pos.lat], duration: 150 });
 }
 
 document.addEventListener('keydown', (e) => {
