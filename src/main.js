@@ -1,7 +1,7 @@
 // main.js — Game Loop Principal: orquesta todos los módulos de GeoChomp
 
 import { initMap, addGameLayers, updatePlayerLayer, updatePelletLayers, updateGhostLayers, updateTrailLayer } from './map.js';
-import { startGPS, stopGPS, snapToRoad } from './gps.js';
+import { startGPS, stopGPS } from './gps.js';
 import { StreetGraph } from './graph.js';
 import { Ghost } from './ghosts.js';
 import { GameState } from './game.js';
@@ -31,6 +31,8 @@ const GHOST_STARTS = {
 // ── Estado global ─────────────────────────────────────────────────────────────────
 let map, game, graph, ghosts = [], audio, gpsWatchId = null;
 let playerPos = null;
+let currentEdge = null;   // { nodeA, nodeB, dist, progress (0..1) } — graph edge player is on
+let desiredDir  = null;   // { lat, lng } — last non-zero direction vector from held keys
 let lastLayerUpdate = 0;
 let isInitialized = false;
 
@@ -207,6 +209,9 @@ function handlePlayerDeath() {
     } else {
         // Flash rojo en el mapa
         flashScreen('#FF000030');
+        // Reset graph edge so player re-snaps to nearest node after cooldown
+        currentEdge = null;
+        desiredDir  = null;
         // Reposicionar fantasmas
         ghosts.forEach((g, i) => {
             const starts = Object.values(GHOST_STARTS);
@@ -355,11 +360,7 @@ function startDemoMode() {
 }
 
 // ── Controles de teclado (demo / desktop) ─────────────────────────────────────────
-// Moves ~12 meters per keypress. At latitude 40°N:
-//   1° lat ≈ 111 000 m  →  12 m ≈ 0.000108°
-//   1° lng ≈  85 200 m  →  12 m ≈ 0.000141°
-const KEY_STEP_LAT = 0.000108;   // ~12m per step at latitude 40°N
-const KEY_STEP_LNG = 0.000141;   // ~12m per step at longitude 40°N
+const PLAYER_SPEED_MPS = 50;  // game speed in m/s (~7.5 m per 150 ms tick)
 
 const MOVE_KEYS = new Set([
     'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight',
@@ -370,29 +371,81 @@ const MOVE_KEYS = new Set([
 const keysHeld = new Set();
 let keyMoveInterval = null;
 
+// Returns the neighbor edge from `node` whose direction best matches `dir` (dot-product),
+// or null if nothing is within the tolerance threshold (~72°).
+function findBestEdgeFrom(node, dir) {
+    const len = Math.hypot(dir.lat, dir.lng);
+    if (len === 0) return null;
+    const nd = { lat: dir.lat / len, lng: dir.lng / len };
+
+    let best = null, bestDot = 0.3;
+    for (const { node: nb, dist } of node.neighbors) {
+        const elen = Math.hypot(nb.lat - node.lat, nb.lng - node.lng);
+        if (elen === 0) continue;
+        const dot = (nd.lat * (nb.lat - node.lat) + nd.lng * (nb.lng - node.lng)) / elen;
+        if (dot > bestDot) { bestDot = dot; best = { nodeA: node, nodeB: nb, dist, progress: 0 }; }
+    }
+    return best;
+}
+
+// Linearly interpolates a lat/lng position along a graph edge.
+function lerpEdge({ nodeA, nodeB, progress }) {
+    const t = Math.min(Math.max(progress, 0), 1);
+    return {
+        lat: nodeA.lat + t * (nodeB.lat - nodeA.lat),
+        lng: nodeA.lng + t * (nodeB.lng - nodeA.lng),
+    };
+}
+
 function applyKeyMovement() {
-    if (!playerPos || !game || game.phase !== 'playing') return;
+    if (!game || game.phase !== 'playing' || !graph) return;
 
+    // Capture desired direction from held keys
     let dLat = 0, dLng = 0;
-    if (keysHeld.has('ArrowUp')    || keysHeld.has('w') || keysHeld.has('W')) dLat += KEY_STEP_LAT;
-    if (keysHeld.has('ArrowDown')  || keysHeld.has('s') || keysHeld.has('S')) dLat -= KEY_STEP_LAT;
-    if (keysHeld.has('ArrowRight') || keysHeld.has('d') || keysHeld.has('D')) dLng += KEY_STEP_LNG;
-    if (keysHeld.has('ArrowLeft')  || keysHeld.has('a') || keysHeld.has('A')) dLng -= KEY_STEP_LNG;
+    if (keysHeld.has('ArrowUp')    || keysHeld.has('w') || keysHeld.has('W')) dLat =  1;
+    if (keysHeld.has('ArrowDown')  || keysHeld.has('s') || keysHeld.has('S')) dLat = -1;
+    if (keysHeld.has('ArrowRight') || keysHeld.has('d') || keysHeld.has('D')) dLng =  1;
+    if (keysHeld.has('ArrowLeft')  || keysHeld.has('a') || keysHeld.has('A')) dLng = -1;
 
-    if (dLat === 0 && dLng === 0) return;
+    if (dLat !== 0 || dLng !== 0) desiredDir = { lat: dLat, lng: dLng };
+    if (!desiredDir) return;
 
-    const rawPos = { lat: playerPos.lat + dLat, lng: playerPos.lng + dLng };
+    // Bootstrap: snap to nearest graph node on first movement
+    if (!currentEdge) {
+        if (!playerPos) return;
+        const start = graph.nearestNode(playerPos.lat, playerPos.lng);
+        if (!start) return;
+        currentEdge = findBestEdgeFrom(start, desiredDir);
+        if (!currentEdge) return;
+    }
 
-    // Snap to nearest street; fall back to rawPos if data isn't loaded yet
-    const streets = window._geochomp_mapData?.streets;
-    const finalPos = streets ? snapToRoad(rawPos, streets) : rawPos;
+    // Advance along the current edge (distance per tick = speed × tick_s)
+    const step = (PLAYER_SPEED_MPS * 0.15) / currentEdge.dist;
+    currentEdge.progress += step;
 
-    // Redraw dot immediately — bypass the 1000ms MAP_UPDATE_THROTTLE
-    updatePlayerLayer(map, finalPos);
+    // Reached / overshot the end node — pick the next edge
+    if (currentEdge.progress >= 1.0) {
+        const overflow = currentEdge.progress - 1.0;
+        const endNode  = currentEdge.nodeB;
+        // Prefer the desired direction; fall back to continuing straight
+        const straightDir = {
+            lat: currentEdge.nodeB.lat - currentEdge.nodeA.lat,
+            lng: currentEdge.nodeB.lng - currentEdge.nodeA.lng,
+        };
+        const next = findBestEdgeFrom(endNode, desiredDir)
+                  || findBestEdgeFrom(endNode, straightDir);
+        if (next) {
+            next.progress = overflow * (currentEdge.dist / next.dist);  // carry overflow
+            currentEdge   = next;
+        } else {
+            currentEdge.progress = 1.0;  // dead end — stop at node
+        }
+    }
 
-    // Feed snapped position into game logic (pellet/ghost collision, trail, etc.)
-    handleGPSUpdate(finalPos, 5);
-    map.panTo([finalPos.lng, finalPos.lat], { duration: 80 });
+    const pos = lerpEdge(currentEdge);
+    updatePlayerLayer(map, pos);    // immediate redraw, bypasses 1000ms throttle
+    handleGPSUpdate(pos, 5);       // pellet/ghost collision, trail, score
+    map.panTo([pos.lng, pos.lat], { duration: 80 });
 }
 
 document.addEventListener('keydown', (e) => {
