@@ -122,11 +122,6 @@ function handleGPSUpdate(pos, accuracy) {
 
     updateGPSIndicator(accuracy);
 
-    // Snap-to-road sobre las calles del barrio
-    const snapped = (game.pelletsData && graph)
-        ? snapToRoad(pos, { type: 'FeatureCollection', features: [] })  // evitar coste en cada tick
-        : pos;
-
     // Primer fix: centrar mapa y arrancar la partida
     if (game.phase === 'idle') {
         map.flyTo({ center: [pos.lng, pos.lat], zoom: 17.5, duration: 1500 });
@@ -360,11 +355,11 @@ function startDemoMode() {
 }
 
 // ── Controles de teclado (demo / desktop) ─────────────────────────────────────────
-// Moves ~5 meters per keypress. At latitude 40°N:
-//   1° lat ≈ 111 000 m  →  5 m ≈ 0.000045°
-//   1° lng ≈  85 200 m  →  5 m ≈ 0.000059°
-const KEY_STEP_LAT = 0.000045;
-const KEY_STEP_LNG = 0.000059;
+// Moves ~12 meters per keypress. At latitude 40°N:
+//   1° lat ≈ 111 000 m  →  12 m ≈ 0.000108°
+//   1° lng ≈  85 200 m  →  12 m ≈ 0.000141°
+const KEY_STEP_LAT = 0.000108;   // ~12m per step at latitude 40°N
+const KEY_STEP_LNG = 0.000141;   // ~12m per step at longitude 40°N
 
 const MOVE_KEYS = new Set([
     'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight',
@@ -386,9 +381,18 @@ function applyKeyMovement() {
 
     if (dLat === 0 && dLng === 0) return;
 
-    const newPos = { lat: playerPos.lat + dLat, lng: playerPos.lng + dLng };
-    handleGPSUpdate(newPos, 5);
-    map.panTo([newPos.lng, newPos.lat], { duration: 80 });
+    const rawPos = { lat: playerPos.lat + dLat, lng: playerPos.lng + dLng };
+
+    // Snap to nearest street; fall back to rawPos if data isn't loaded yet
+    const streets = window._geochomp_mapData?.streets;
+    const finalPos = streets ? snapToRoad(rawPos, streets) : rawPos;
+
+    // Redraw dot immediately — bypass the 1000ms MAP_UPDATE_THROTTLE
+    updatePlayerLayer(map, finalPos);
+
+    // Feed snapped position into game logic (pellet/ghost collision, trail, etc.)
+    handleGPSUpdate(finalPos, 5);
+    map.panTo([finalPos.lng, finalPos.lat], { duration: 80 });
 }
 
 document.addEventListener('keydown', (e) => {
